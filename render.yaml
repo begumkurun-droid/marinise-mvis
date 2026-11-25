@@ -1,0 +1,51 @@
+# Render.com Blueprint — ücretsiz (free plan) demo dağıtımı.
+#
+# Bu dosya, "New +" > "Blueprint" ile bu repoyu seçtiğinizde Render'ın
+# otomatik olarak kuracağı servisleri tanımlar: 1 Postgres veritabanı,
+# 1 backend (FastAPI), 1 frontend (Next.js).
+#
+# NEXT_PUBLIC_API_URL ve CORS_ORIGINS değerlerini Render panelinden elle
+# girmeniz gerekir (ilk deploy'dan sonra adresler netleşince) — bkz.
+# docs/DEPLOYMENT.md "Render.com'a ücretsiz demo kurulumu" bölümü.
+
+databases:
+  - name: marinise-mvis-db
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: marinise-mvis-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m scripts.render_bootstrap && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: marinise-mvis-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AI_PROVIDER
+        value: none
+      - key: ADMIN_EMAIL
+        value: admin@marinepower.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Demo Admin
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: marinise-mvis-frontend
+    runtime: node
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- -p $PORT
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
