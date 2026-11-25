@@ -164,9 +164,21 @@ async def run_forever() -> None:
         "FilterMessageTypes": ["PositionReport"],
     }
 
-    async for ws in websockets.connect(settings.aisstream_ws_url):
+    # Render's free instance can be slow to open an outbound connection
+    # right after waking from an idle spin-down, so the default 10s
+    # handshake timeout is too tight - give it more room before giving up
+    # on a single attempt (the reconnecting iterator still retries forever
+    # regardless).
+    async for ws in websockets.connect(
+        settings.aisstream_ws_url,
+        open_timeout=30,
+        ping_interval=20,
+        ping_timeout=20,
+    ):
         try:
+            logger.info("AISStream WebSocket connected - sending subscribe message...")
             await ws.send(json.dumps(subscribe_message))
+            logger.info("Subscribed to AISStream - waiting for AIS messages...")
             async for raw_message in ws:
                 data = json.loads(raw_message)
                 db = SessionLocal()
