@@ -1,11 +1,22 @@
 import asyncio
 import logging
+import sys
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routers import auth, companies, dashboard, vessels
+
+# Render only shows what actually reaches stdout. Python's root logger
+# defaults to WARNING, so without this, our own INFO lines (and any
+# exception raised inside the AIS background task) are silently dropped
+# instead of showing up in the Render log viewer.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 
 settings = get_settings()
 logger = logging.getLogger("marinise.main")
@@ -51,4 +62,16 @@ async def _start_ais_ingestion_if_configured() -> None:
     from app.services.ais_ingest import run_forever
 
     logger.info("AISSTREAM_API_KEY set - starting live AIS ingestion background task.")
-    asyncio.create_task(run_forever())
+    task = asyncio.create_task(run_forever())
+
+    def _log_if_failed(finished_task: "asyncio.Task[None]") -> None:
+        # A background task's exception is otherwise swallowed until the
+        # task is garbage-collected - log it immediately so a bad/expired
+        # key or a connection error shows up in Render's log viewer.
+        if finished_task.cancelled():
+            return
+        exc = finished_task.exception()
+        if exc is not None:
+            logger.error("AIS ingestion task stopped with an error: %r", exc)
+
+    task.add_done_callback(_log_if_failed)
